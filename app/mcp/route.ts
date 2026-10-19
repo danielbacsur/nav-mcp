@@ -1,3 +1,6 @@
+import { withAllowedHosts } from "./_allowed-hosts";
 import { mcpHandler } from "./_handler";
 
-export { mcpHandler as GET, mcpHandler as POST };
+const handler = withAllowedHosts(mcpHandler);
+
+export { handler as GET, handler as POST };
