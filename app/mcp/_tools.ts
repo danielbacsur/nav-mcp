@@ -1,12 +1,59 @@
-import type { McpServer, ToolAnnotations } from "@modelcontextprotocol/server";
+import type {
+  CallToolResult,
+  McpServer,
+  ServerContext,
+  ToolAnnotations,
+} from "@modelcontextprotocol/server";
 import { z } from "zod";
+
+import {
+  callNav,
+  element,
+  getServiceMetrics,
+  type NavResult,
+} from "./_nav/client";
+import { readCredentials, readEnv } from "./_nav/credentials";
+import { readSoftware } from "./_nav/software";
 
 type ToolDefinition = {
   name: string;
   title: string;
   description: string;
   annotations: ToolAnnotations;
+  inputSchema?: z.ZodObject;
+  // Method syntax keeps the arguments bivariant, so each tool can narrow them.
+  handler?(
+    args: Record<string, unknown>,
+    ctx: ServerContext,
+  ): Promise<CallToolResult>;
 };
+
+// Ties a handler's arguments to its input schema.
+function implemented<Schema extends z.ZodObject>(
+  definition: Omit<ToolDefinition, "inputSchema" | "handler"> & {
+    inputSchema: Schema;
+    handler: (
+      args: z.infer<Schema>,
+      ctx: ServerContext,
+    ) => Promise<CallToolResult>;
+  },
+): ToolDefinition {
+  return definition;
+}
+
+function errorResult(message: string): CallToolResult {
+  return { content: [{ type: "text", text: message }], isError: true };
+}
+
+function navResult(result: NavResult): CallToolResult {
+  const value = result.ok ? result.data : { error: result.error };
+
+  return {
+    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
+    structuredContent: value,
+    isError: !result.ok,
+  };
+}
 
 const query: ToolAnnotations = {
   readOnlyHint: true,
@@ -15,8 +62,8 @@ const query: ToolAnnotations = {
   openWorldHint: true,
 };
 
-// One tool per NAV Online Invoice 3.0 operation, in snake case. Input
-// schemas and handlers arrive with each operation's implementation.
+// One tool per NAV Online Invoice 3.0 operation, in snake case. Tools
+// without a handler are not implemented yet.
 export const tools: ToolDefinition[] = [
   {
     name: "token_exchange",
@@ -105,29 +152,66 @@ export const tools: ToolDefinition[] = [
     annotations: query,
   },
 
-  {
+  implemented({
     name: "query_taxpayer",
     title: "Look up taxpayer",
     description:
-      "Returns the validity, name and addresses of a Hungarian taxpayer by 8-digit tax number.",
+      "Returns the validity, name and addresses of a Hungarian taxpayer by 8-digit tax number. Defaults to the caller's own taxpayer.",
     annotations: query,
-  },
+    inputSchema: z.object({
+      taxNumber: z
+        .string()
+        .regex(/^\d{8}$/)
+        .optional()
+        .describe("The first 8 digits of the tax number."),
+    }),
+    handler: async ({ taxNumber }, ctx) => {
+      const { credentials, error } = readCredentials(ctx.http?.req);
 
-  {
+      if (!credentials) {
+        return errorResult(error);
+      }
+
+      const { software, error: softwareError } = readSoftware();
+
+      if (!software) {
+        return errorResult(softwareError);
+      }
+
+      return navResult(
+        await callNav(
+          "queryTaxpayer",
+          credentials,
+          software,
+          element("taxNumber", taxNumber ?? credentials.taxNumber),
+        ),
+      );
+    },
+  }),
+
+  implemented({
     name: "query_service_metrics",
     title: "Get service metrics",
     description:
       "Returns NAV's per-minute service metrics for the last 60 minutes. Needs no credentials.",
     annotations: query,
-  },
+    inputSchema: z.object({
+      metricName: z
+        .string()
+        .optional()
+        .describe("A single metric to return, such as INVOICE_SERVICE_CALL."),
+    }),
+    handler: async ({ metricName }, ctx) =>
+      navResult(await getServiceMetrics(readEnv(ctx.http?.req), metricName)),
+  }),
 ];
 
 export function registerTools(server: McpServer) {
-  for (const { name, ...config } of tools) {
+  for (const { name, inputSchema, handler, ...config } of tools) {
     server.registerTool(
       name,
-      { ...config, inputSchema: z.object({}) },
-      async () => ({ content: [] }),
+      { ...config, inputSchema: inputSchema ?? z.object({}) },
+      handler ?? (async () => errorResult(`${name} is not implemented yet.`)),
     );
   }
 }
