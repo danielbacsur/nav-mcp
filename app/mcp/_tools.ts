@@ -200,6 +200,31 @@ function invoiceDigestQueryXml(query: z.infer<typeof invoiceDigestQuery>) {
   ].join("");
 }
 
+const invoiceChainQuery = z
+  .object({
+    invoiceNumber: z.string().min(1).max(50),
+    direction,
+    page: z.int().min(1).default(1),
+    supplierTaxNumber: taxNumber
+      .optional()
+      .describe("The supplier's tax number, for INBOUND invoices only."),
+  })
+  .refine(
+    (query) => !query.supplierTaxNumber || query.direction === "INBOUND",
+    { message: "supplierTaxNumber is only allowed with INBOUND." },
+  );
+
+function invoiceChainQueryXml(query: z.infer<typeof invoiceChainQuery>) {
+  return [
+    element("page", query.page.toString()),
+    "<invoiceChainQuery>",
+    element("invoiceNumber", query.invoiceNumber),
+    element("invoiceDirection", query.direction),
+    element("taxNumber", query.supplierTaxNumber),
+    "</invoiceChainQuery>",
+  ].join("");
+}
+
 const query: ToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -328,13 +353,23 @@ export const tools: ToolDefinition[] = [
     },
   }),
 
-  {
+  implemented({
     name: "query_invoice_chain_digest",
     title: "Get invoice modification chain",
     description:
-      "Returns the modification chain of an invoice, one page at a time.",
+      "Returns an invoice's original report and every modification or cancellation after it, one page at a time.",
     annotations: query,
-  },
+    inputSchema: invoiceChainQuery,
+    handler: async (args, ctx) => {
+      const { result, error } = await queryNav(
+        ctx,
+        "queryInvoiceChainDigest",
+        () => invoiceChainQueryXml(args),
+      );
+
+      return result ? navResult(result) : errorResult(error);
+    },
+  }),
 
   implemented({
     name: "query_taxpayer",
