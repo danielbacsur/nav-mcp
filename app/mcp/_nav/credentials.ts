@@ -16,7 +16,11 @@ const headersSchema = z
   })
   .refine(
     (headers) => headers["x-nav-password"] || headers["x-nav-password-hash"],
-    { message: "Send X-NAV-Password or X-NAV-Password-Hash." },
+    {
+      message: "Send X-NAV-Password or X-NAV-Password-Hash.",
+      // Report it together with any other missing header.
+      when: () => true,
+    },
   );
 
 export type NavCredentials = {

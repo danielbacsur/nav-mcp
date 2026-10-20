@@ -1,3 +1,5 @@
+import { gunzipSync } from "node:zlib";
+
 import { XMLParser } from "fast-xml-parser";
 
 import type { NavCredentials } from "./credentials";
@@ -14,12 +16,17 @@ const TIMEOUT_MS = 55_000;
 
 // Repeatable NAV elements, kept as arrays even when only one comes back.
 const LIST_ELEMENTS = new Set([
+  "additionalInvoiceData",
+  "additionalLineData",
   "businessValidationMessages",
   "invoiceDigest",
+  "line",
   "metric",
   "metricDescription",
   "metricValues",
   "processingResult",
+  "productCode",
+  "summaryByVatRate",
   "taxpayerAddressItem",
   "technicalValidationMessages",
   "transaction",
@@ -114,7 +121,7 @@ function envelope(
   ].join("");
 }
 
-function parseBody(text: string) {
+function parseXml(text: string) {
   try {
     const parsed = parser.parse(text) as Record<string, unknown>;
     const rootName = Object.keys(parsed).find((key) => key !== "?xml");
@@ -130,7 +137,7 @@ function toResult(
   text: string,
   requestId?: string,
 ): NavResult {
-  const root = parseBody(text);
+  const root = parseXml(text);
 
   // GeneralExceptionResponse has no result wrapper, so its funcCode sits at
   // the root. NAV also reports downtime as OK with this message.
@@ -164,6 +171,14 @@ function toResult(
   delete data.software;
 
   return { ok: true, data };
+}
+
+// Invoices come back as base64 XML, gzipped when the submitter compressed
+// them, inside the response XML.
+export function decodeInvoiceData(base64: string, compressed: boolean) {
+  const bytes = Buffer.from(base64, "base64");
+
+  return parseXml((compressed ? gunzipSync(bytes) : bytes).toString("utf8"));
 }
 
 async function send(url: string, init: RequestInit, requestId?: string) {
