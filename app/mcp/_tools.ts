@@ -200,6 +200,61 @@ function invoiceDigestQueryXml(query: z.infer<typeof invoiceDigestQuery>) {
   ].join("");
 }
 
+const invoiceChainQuery = z
+  .object({
+    invoiceNumber: z.string().min(1).max(50),
+    direction,
+    page: z.int().min(1).default(1),
+    supplierTaxNumber: taxNumber
+      .optional()
+      .describe("The supplier's tax number, for INBOUND invoices only."),
+  })
+  .refine(
+    (query) => !query.supplierTaxNumber || query.direction === "INBOUND",
+    { message: "supplierTaxNumber is only allowed with INBOUND." },
+  );
+
+function invoiceChainQueryXml(query: z.infer<typeof invoiceChainQuery>) {
+  return [
+    element("page", query.page.toString()),
+    "<invoiceChainQuery>",
+    element("invoiceNumber", query.invoiceNumber),
+    element("invoiceDirection", query.direction),
+    element("taxNumber", query.supplierTaxNumber),
+    "</invoiceChainQuery>",
+  ].join("");
+}
+
+const transactionListQuery = z.object({
+  insertedFrom: z.iso
+    .datetime({ offset: true })
+    .describe("When NAV received the submission, as an ISO timestamp."),
+  insertedTo: z.iso.datetime({ offset: true }),
+  page: z.int().min(1).default(1),
+  requestStatus: z
+    .enum(["RECEIVED", "PROCESSING", "SAVED", "FINISHED", "NOTIFIED"])
+    .optional(),
+});
+
+function transactionListQueryXml(query: z.infer<typeof transactionListQuery>) {
+  return [
+    element("page", query.page.toString()),
+    "<insDate>",
+    element("dateTimeFrom", new Date(query.insertedFrom).toISOString()),
+    element("dateTimeTo", new Date(query.insertedTo).toISOString()),
+    "</insDate>",
+    element("requestStatus", query.requestStatus),
+  ].join("");
+}
+
+const transactionStatusQuery = z.object({
+  transactionId: z.string().regex(/^[+a-zA-Z0-9_]{1,30}$/),
+  returnOriginalRequest: z
+    .boolean()
+    .default(false)
+    .describe("Also return each submitted invoice, decoded."),
+});
+
 const query: ToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -249,21 +304,62 @@ export const tools: ToolDefinition[] = [
     },
   },
 
-  {
+  implemented({
     name: "query_transaction_status",
     title: "Get transaction status",
     description:
       "Returns the per-invoice processing status and validation messages of a transaction.",
     annotations: query,
-  },
+    inputSchema: transactionStatusQuery,
+    handler: async (args, ctx) => {
+      const { result, error } = await queryNav(
+        ctx,
+        "queryTransactionStatus",
+        () =>
+          element("transactionId", args.transactionId) +
+          element("returnOriginalRequest", String(args.returnOriginalRequest)),
+      );
 
-  {
+      if (!result) {
+        return errorResult(error);
+      }
+
+      const processing = result.ok
+        ? (result.data.processingResults as
+            | { processingResult?: Record<string, unknown>[] }
+            | undefined)
+        : undefined;
+
+      for (const item of processing?.processingResult ?? []) {
+        if (typeof item.originalRequest === "string") {
+          item.originalRequest = decodeInvoiceData(
+            item.originalRequest,
+            item.compressedContentIndicator === "true",
+          );
+        }
+      }
+
+      return navResult(result);
+    },
+  }),
+
+  implemented({
     name: "query_transaction_list",
     title: "List transactions",
     description:
       "Lists the taxpayer's transactions submitted within a date window of at most 35 days.",
     annotations: query,
-  },
+    inputSchema: transactionListQuery,
+    handler: async (args, ctx) => {
+      const { result, error } = await queryNav(
+        ctx,
+        "queryTransactionList",
+        () => transactionListQueryXml(args),
+      );
+
+      return result ? navResult(result) : errorResult(error);
+    },
+  }),
 
   implemented({
     name: "query_invoice_data",
@@ -328,13 +424,23 @@ export const tools: ToolDefinition[] = [
     },
   }),
 
-  {
+  implemented({
     name: "query_invoice_chain_digest",
     title: "Get invoice modification chain",
     description:
-      "Returns the modification chain of an invoice, one page at a time.",
+      "Returns an invoice's original report and every modification or cancellation after it, one page at a time.",
     annotations: query,
-  },
+    inputSchema: invoiceChainQuery,
+    handler: async (args, ctx) => {
+      const { result, error } = await queryNav(
+        ctx,
+        "queryInvoiceChainDigest",
+        () => invoiceChainQueryXml(args),
+      );
+
+      return result ? navResult(result) : errorResult(error);
+    },
+  }),
 
   implemented({
     name: "query_taxpayer",
