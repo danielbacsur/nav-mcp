@@ -28,7 +28,7 @@ function without(...names: (keyof typeof HEADERS)[]) {
 
 describe("readCredentials", () => {
   describe("valid headers", () => {
-    it("maps every header onto the credentials that sign requests", () => {
+    it("maps every header onto the credentials it signs with", () => {
       expect(readCredentials(request(HEADERS))).toEqual({
         credentials: {
           login: "tstuser01abcde",
@@ -41,7 +41,7 @@ describe("readCredentials", () => {
       });
     });
 
-    it("reads the headers whatever case the caller sends them in", () => {
+    it("reads the headers whatever case the caller uses", () => {
       const lowerCase = Object.fromEntries(
         Object.entries(HEADERS).map(([name, value]) => [
           name.toLowerCase(),
@@ -54,7 +54,7 @@ describe("readCredentials", () => {
       );
     });
 
-    it("upper-cases a password hash the caller computed in lower case", () => {
+    it("upper-cases a password hash given in lower case", () => {
       const { credentials } = readCredentials(
         request({
           ...without("X-NAV-Password"),
@@ -65,7 +65,7 @@ describe("readCredentials", () => {
       expect(credentials?.passwordHash).toBe(PASSWORD_HASH);
     });
 
-    it("prefers the password hash over the password when given both", () => {
+    it("prefers the password hash when given a password too", () => {
       const { credentials } = readCredentials(
         request({ ...HEADERS, "X-NAV-Password-Hash": "A".repeat(128) }),
       );
@@ -73,7 +73,7 @@ describe("readCredentials", () => {
       expect(credentials?.passwordHash).toBe("A".repeat(128));
     });
 
-    it("keeps the first eight digits of every tax number format", () => {
+    it("keeps the first 8 digits of every tax number format", () => {
       for (const taxNumber of [
         "11111111",
         "11111111242",
@@ -89,7 +89,7 @@ describe("readCredentials", () => {
       }
     });
 
-    it("leaves the exchange key out when the caller does not send it", () => {
+    it("leaves the exchange key out when the caller omits it", () => {
       const { credentials } = readCredentials(
         request(without("X-NAV-Exchange-Key")),
       );
@@ -98,7 +98,7 @@ describe("readCredentials", () => {
       expect(credentials?.exchangeKey).toBeUndefined();
     });
 
-    it("selects the production environment only when asked for it", () => {
+    it("selects production only when the caller asks for it", () => {
       const { credentials } = readCredentials(
         request({ ...HEADERS, "X-NAV-Env": "production" }),
       );
@@ -108,14 +108,14 @@ describe("readCredentials", () => {
   });
 
   describe("invalid headers", () => {
-    it("lists every missing header when the request has no headers", () => {
+    it("lists every missing header for a request without any", () => {
       expect(readCredentials(undefined)).toEqual({
         error:
           "X-NAV-Login is missing or invalid. X-NAV-Signature-Key is missing or invalid. X-NAV-Tax-Number is missing or invalid. Send X-NAV-Password or X-NAV-Password-Hash.",
       });
     });
 
-    it("lists every invalid header in one error, each named once", () => {
+    it("lists every invalid header once in a single error", () => {
       expect(
         readCredentials(
           request({
@@ -133,7 +133,7 @@ describe("readCredentials", () => {
       });
     });
 
-    it("asks for a password together with the other missing headers", () => {
+    it("asks for a password along with other missing headers", () => {
       expect(
         readCredentials(request(without("X-NAV-Password", "X-NAV-Login"))),
       ).toEqual({
@@ -142,7 +142,7 @@ describe("readCredentials", () => {
       });
     });
 
-    it("never echoes the value of a header it rejects in the error", () => {
+    it("never echoes a rejected header's value in the error", () => {
       const secrets = {
         "X-NAV-Login": "secret-login-value",
         "X-NAV-Password": "",
@@ -165,16 +165,16 @@ describe("readCredentials", () => {
 });
 
 describe("readEnv", () => {
-  it("defaults to the test environment without an X-NAV-Env header", () => {
+  it("defaults to the test environment with no X-NAV-Env", () => {
     expect(readEnv(undefined)).toBe("test");
     expect(readEnv(request({}))).toBe("test");
   });
 
-  it("returns the production environment when the header asks for it", () => {
+  it("returns the production environment when asked for", () => {
     expect(readEnv(request({ "X-NAV-Env": "production" }))).toBe("production");
   });
 
-  it("falls back to the test environment for an unknown header value", () => {
+  it("falls back to test for an unknown X-NAV-Env value", () => {
     expect(readEnv(request({ "X-NAV-Env": "staging" }))).toBe("test");
   });
 });

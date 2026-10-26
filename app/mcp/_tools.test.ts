@@ -158,7 +158,7 @@ afterEach(() => {
 });
 
 describe("registerTools", () => {
-  it("registers one tool per NAV operation with its own config", () => {
+  it("registers each NAV operation as a configured tool", () => {
     const registerTool = vi.fn();
 
     registerTools({ registerTool } as unknown as McpServer);
@@ -189,7 +189,7 @@ describe("registerTools", () => {
     }
   });
 
-  it("marks the query tools read-only and only annulment destructive", () => {
+  it("marks queries read-only, only annulment destructive", () => {
     for (const { name, annotations } of tools) {
       expect(annotations.readOnlyHint).toBe(name.startsWith("query_"));
       expect(annotations.destructiveHint).toBe(name === "manage_annulment");
@@ -211,7 +211,7 @@ describe("input schemas", () => {
       original: { originalInvoiceNumber: "INV-1" },
     };
 
-    it("accepts each of the three search criteria when given alone", () => {
+    it("accepts each of the three search criteria alone", () => {
       for (const criterion of Object.values(CRITERIA)) {
         expect(
           issues("query_invoice_digest", {
@@ -222,13 +222,13 @@ describe("input schemas", () => {
       }
     });
 
-    it("rejects a search that gives none of the three search criteria", () => {
+    it("rejects a search with none of the search criteria", () => {
       expect(issues("query_invoice_digest", { direction: "OUTBOUND" })).toEqual(
         [EXACTLY_ONE],
       );
     });
 
-    it("rejects a search that combines two of the three search criteria", () => {
+    it("rejects a search that combines two search criteria", () => {
       expect(
         issues("query_invoice_digest", {
           direction: "OUTBOUND",
@@ -238,7 +238,7 @@ describe("input schemas", () => {
       ).toEqual([EXACTLY_ONE]);
     });
 
-    it("rejects a date range that gives only one end of the window", () => {
+    it("rejects a date range with only one end of the window", () => {
       expect(
         issues("query_invoice_digest", {
           direction: "OUTBOUND",
@@ -247,7 +247,7 @@ describe("input schemas", () => {
       ).toEqual([EXACTLY_ONE]);
     });
 
-    it("starts a search at the first page unless asked for another", () => {
+    it("starts at the first page unless asked for another", () => {
       expect(
         tool("query_invoice_digest").inputSchema.parse({
           direction: "INBOUND",
@@ -264,7 +264,7 @@ describe("input schemas", () => {
       "query_invoice_chain_digest",
     ];
 
-    it("accepts a supplier tax number on an inbound invoice lookup", () => {
+    it("accepts a supplier tax number on an inbound lookup", () => {
       for (const name of TOOLS) {
         expect(
           issues(name, {
@@ -276,7 +276,7 @@ describe("input schemas", () => {
       }
     });
 
-    it("rejects a supplier tax number on an outbound invoice lookup", () => {
+    it("rejects a supplier tax number on an outbound lookup", () => {
       for (const name of TOOLS) {
         expect(
           issues(name, {
@@ -288,7 +288,7 @@ describe("input schemas", () => {
       }
     });
 
-    it("rejects a supplier tax number that is not exactly 8 digits", () => {
+    it("rejects a supplier tax number that isn't 8 digits", () => {
       for (const name of TOOLS) {
         expect(
           issues(name, {
@@ -318,14 +318,14 @@ describe("input schemas", () => {
       }),
     };
 
-    it("accepts between one and a hundred operations in one request", () => {
+    it("accepts one to a hundred operations in a request", () => {
       for (const [name, args] of Object.entries(OPERATIONS)) {
         expect(issues(name, args(1))).toEqual([]);
         expect(issues(name, args(100))).toEqual([]);
       }
     });
 
-    it("rejects a request with no operations or more than a hundred", () => {
+    it("rejects zero operations or more than a hundred", () => {
       for (const [name, args] of Object.entries(OPERATIONS)) {
         expect(issues(name, args(0))).toHaveLength(1);
         expect(issues(name, args(101))).toHaveLength(1);
@@ -334,7 +334,7 @@ describe("input schemas", () => {
   });
 
   describe("other lookups", () => {
-    it("accepts only transaction ids in the pattern NAV issues them", () => {
+    it("accepts only transaction ids shaped like NAV's own", () => {
       expect(
         issues("query_transaction_status", {
           transactionId: "4LOVXPC8P27LKH1V",
@@ -346,7 +346,7 @@ describe("input schemas", () => {
       ).toHaveLength(1);
     });
 
-    it("looks a taxpayer up only by the first 8 digits of its number", () => {
+    it("looks a taxpayer up by its first 8 digits only", () => {
       expect(issues("query_taxpayer", { taxNumber: "12345678" })).toEqual([]);
 
       expect(
@@ -358,7 +358,7 @@ describe("input schemas", () => {
 
 describe("request bodies", () => {
   describe("query_invoice_digest", () => {
-    it("sends an issue date search with every additional filter", async () => {
+    it("sends an issue date search with all extra filters", async () => {
       const fetch = stubNav({
         queryInvoiceDigest: ok("QueryInvoiceDigestResponse"),
       });
@@ -397,7 +397,7 @@ describe("request bodies", () => {
       );
     });
 
-    it("sends insertion times converted from their offset to utc", async () => {
+    it("sends insertion times converted to utc from offsets", async () => {
       const fetch = stubNav({
         queryInvoiceDigest: ok("QueryInvoiceDigestResponse"),
       });
@@ -419,7 +419,7 @@ describe("request bodies", () => {
       );
     });
 
-    it("sends an original invoice number without additional filters", async () => {
+    it("sends an original invoice number without filters", async () => {
       const fetch = stubNav({
         queryInvoiceDigest: ok("QueryInvoiceDigestResponse"),
       });
@@ -442,7 +442,7 @@ describe("request bodies", () => {
   });
 
   describe("invoice number lookups", () => {
-    it("sends the batch index and supplier of an inbound invoice", async () => {
+    it("sends an inbound invoice's batch index and supplier", async () => {
       const fetch = stubNav({
         queryInvoiceData: ok("QueryInvoiceDataResponse"),
       });
@@ -459,7 +459,7 @@ describe("request bodies", () => {
       );
     });
 
-    it("checks an outbound invoice by its number and its direction", async () => {
+    it("checks an outbound invoice by number and direction", async () => {
       const fetch = stubNav({
         queryInvoiceCheck: ok("QueryInvoiceCheckResponse"),
       });
@@ -473,7 +473,7 @@ describe("request bodies", () => {
       );
     });
 
-    it("sends the page and the supplier of an invoice chain lookup", async () => {
+    it("sends the page and supplier of an invoice chain", async () => {
       const fetch = stubNav({
         queryInvoiceChainDigest: ok("QueryInvoiceChainDigestResponse"),
       });
@@ -492,7 +492,7 @@ describe("request bodies", () => {
   });
 
   describe("transactions", () => {
-    it("lists transactions in a utc window filtered by their status", async () => {
+    it("lists transactions in a utc window by their status", async () => {
       const fetch = stubNav({
         queryTransactionList: ok("QueryTransactionListResponse"),
       });
@@ -508,7 +508,7 @@ describe("request bodies", () => {
       );
     });
 
-    it("asks for a transaction's status without the original request", async () => {
+    it("asks for a status without the original request", async () => {
       const fetch = stubNav({
         queryTransactionStatus: ok("QueryTransactionStatusResponse"),
       });
@@ -522,7 +522,7 @@ describe("request bodies", () => {
   });
 
   describe("query_taxpayer", () => {
-    it("looks up the caller's own taxpayer unless given another one", async () => {
+    it("looks up the caller's taxpayer unless given another", async () => {
       const fetch = stubNav({ queryTaxpayer: ok("QueryTaxpayerResponse") });
 
       await call("query_taxpayer", {});
@@ -534,7 +534,7 @@ describe("request bodies", () => {
   });
 
   describe("submissions", () => {
-    it("submits base64 invoice data with a fresh token and signs it", async () => {
+    it("signs base64 invoice data sent with a fresh token", async () => {
       const fetch = stubNav({
         tokenExchange: TOKEN_EXCHANGE,
         manageInvoice: ok("ManageInvoiceResponse"),
@@ -582,7 +582,7 @@ describe("request bodies", () => {
       );
     });
 
-    it("submits each annulment as base64 InvoiceAnnulment xml to sign", async () => {
+    it("signs each annulment as base64 InvoiceAnnulment xml", async () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-26T10:00:00.000Z"));
 
@@ -635,7 +635,7 @@ describe("request bodies", () => {
 
 describe("handlers", () => {
   describe("refusals", () => {
-    it("refuses every NAV tool without credentials and calls nothing", async () => {
+    it("refuses every tool without credentials, calling none", async () => {
       const fetch = stubNav();
 
       for (const { name } of tools) {
@@ -655,7 +655,7 @@ describe("handlers", () => {
       expect(fetch).not.toHaveBeenCalled();
     });
 
-    it("refuses every NAV tool while the server's software is unset", async () => {
+    it("refuses every tool while the software vars are unset", async () => {
       vi.stubEnv("NAV_SOFTWARE_ID", undefined);
 
       const fetch = stubNav();
@@ -677,7 +677,7 @@ describe("handlers", () => {
       expect(fetch).not.toHaveBeenCalled();
     });
 
-    it("refuses to submit or request a token without an exchange key", async () => {
+    it("needs an exchange key to submit or request a token", async () => {
       const fetch = stubNav();
 
       const headers = Object.fromEntries(
@@ -707,7 +707,7 @@ describe("handlers", () => {
   });
 
   describe("results", () => {
-    it("returns NAV's data both as json text and as structured content", async () => {
+    it("returns NAV's data as json and structured content", async () => {
       stubNav({
         queryTaxpayer: ok(
           "QueryTaxpayerResponse",
@@ -727,7 +727,7 @@ describe("handlers", () => {
       });
     });
 
-    it("returns NAV's error as an error result with structured content", async () => {
+    it("returns NAV's error as a structured error result", async () => {
       stubNav({
         queryTaxpayer: new Response(
           ok("GeneralErrorResponse").replace(
@@ -753,7 +753,7 @@ describe("handlers", () => {
       });
     });
 
-    it("returns only the token's validity, never the decoded token", async () => {
+    it("returns the token's validity, never the token itself", async () => {
       stubNav({ tokenExchange: TOKEN_EXCHANGE });
 
       const result = await call("token_exchange");
@@ -767,7 +767,7 @@ describe("handlers", () => {
       expect(JSON.stringify(result)).not.toContain(ENCODED_EXCHANGE_TOKEN);
     });
 
-    it("returns the transaction id that NAV assigns to a submission", async () => {
+    it("returns the transaction id NAV assigns a submission", async () => {
       stubNav({
         tokenExchange: TOKEN_EXCHANGE,
         manageInvoice: ok(
@@ -782,7 +782,7 @@ describe("handlers", () => {
       });
     });
 
-    it("stops a submission when NAV refuses to issue it a token", async () => {
+    it("stops a submission when NAV won't issue it a token", async () => {
       const fetch = stubNav({
         tokenExchange: new Response("", {
           status: 503,
@@ -800,7 +800,7 @@ describe("handlers", () => {
       expect(fetch).toHaveBeenCalledTimes(1);
     });
 
-    it("decodes the invoice data, whether it was gzipped or not", async () => {
+    it("decodes invoice data whether it was gzipped or not", async () => {
       for (const [invoiceData, compressed] of [
         [INVOICE_DATA, "false"],
         [GZIPPED_INVOICE_DATA, "true"],
@@ -827,7 +827,7 @@ describe("handlers", () => {
       }
     });
 
-    it("decodes the original request of every processed invoice", async () => {
+    it("decodes each processed invoice's original request", async () => {
       stubNav({
         queryTransactionStatus: ok(
           "QueryTransactionStatusResponse",
@@ -878,7 +878,7 @@ describe("handlers", () => {
       });
     });
 
-    it("gets service metrics without credentials from the asked host", async () => {
+    it("gets metrics from the asked host without credentials", async () => {
       vi.stubEnv("NAV_SOFTWARE_ID", undefined);
 
       const fetch = stubNav({

@@ -28,7 +28,7 @@ describe("readSoftware", () => {
   });
 
   describe("valid environment", () => {
-    it("identifies this server as nav-mcp at its package version", () => {
+    it("identifies as nav-mcp at the package's own version", () => {
       expect(readSoftware()).toEqual({
         software: {
           softwareId: "HU12345678-NAVMCP1",
@@ -43,7 +43,7 @@ describe("readSoftware", () => {
       });
     });
 
-    it("leaves the optional developer fields out when they are unset", () => {
+    it("leaves out the optional developer fields when unset", () => {
       stubEnv({
         NAV_SOFTWARE_DEV_COUNTRY_CODE: undefined,
         NAV_SOFTWARE_DEV_TAX_NUMBER: undefined,
@@ -56,7 +56,7 @@ describe("readSoftware", () => {
       expect(software?.softwareDevTaxNumber).toBeUndefined();
     });
 
-    it("treats an empty optional variable, as Next loads it, as unset", () => {
+    it("treats an empty optional variable from Next as unset", () => {
       stubEnv({
         NAV_SOFTWARE_DEV_COUNTRY_CODE: "",
         NAV_SOFTWARE_DEV_TAX_NUMBER: "",
@@ -71,7 +71,7 @@ describe("readSoftware", () => {
   });
 
   describe("invalid environment", () => {
-    it("names only the required variables an unfilled example leaves", () => {
+    it("names only the required vars of an unfilled example", () => {
       // Every variable in .env.example is an empty string.
       stubEnv(Object.fromEntries(Object.keys(ENV).map((name) => [name, ""])));
 
@@ -81,7 +81,7 @@ describe("readSoftware", () => {
       });
     });
 
-    it("names every required variable missing from the environment", () => {
+    it("names every required variable missing from the env", () => {
       stubEnv({
         NAV_SOFTWARE_ID: undefined,
         NAV_SOFTWARE_DEV_NAME: undefined,
@@ -94,7 +94,7 @@ describe("readSoftware", () => {
       });
     });
 
-    it("rejects a software id that is not 18 upper-case characters", () => {
+    it("rejects a software id that isn't 18 upper-case chars", () => {
       for (const softwareId of ["hu12345678-navmcp1", "HU12345678-NAVMCP"]) {
         stubEnv({ NAV_SOFTWARE_ID: softwareId });
 
@@ -104,7 +104,7 @@ describe("readSoftware", () => {
       }
     });
 
-    it("rejects a developer country code longer than two letters", () => {
+    it("rejects a developer country code over two letters", () => {
       stubEnv({ NAV_SOFTWARE_DEV_COUNTRY_CODE: "HUN" });
 
       expect(readSoftware()).toEqual({

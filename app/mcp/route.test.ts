@@ -67,7 +67,7 @@ afterEach(() => {
 
 describe("POST", () => {
   describe("mcp requests", () => {
-    it("lists every tool with an input schema that a client can read", async () => {
+    it("lists every tool with a schema a client can read", async () => {
       const { result } = await message(await rpc("tools/list", {}));
 
       expect(result.tools).toHaveLength(11);
@@ -77,7 +77,7 @@ describe("POST", () => {
       }
     });
 
-    it("calls NAV as the technical user in the request's headers", async () => {
+    it("calls NAV as the technical user the headers name", async () => {
       const fetch = stubFetch(
         [
           '<?xml version="1.0" encoding="UTF-8"?>',
@@ -108,7 +108,7 @@ describe("POST", () => {
   });
 
   describe("allowed hosts", () => {
-    it("refuses a request addressed to a host this server does not serve", async () => {
+    it("refuses a host header this server does not serve", async () => {
       const fetch = stubFetch("");
 
       const response = await rpc(
@@ -121,7 +121,7 @@ describe("POST", () => {
       expect(fetch).not.toHaveBeenCalled();
     });
 
-    it("refuses a cross-site request that a page on another origin sent", async () => {
+    it("refuses a cross-site request from another origin", async () => {
       const fetch = stubFetch("");
 
       const response = await rpc(

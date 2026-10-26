@@ -96,38 +96,38 @@ afterEach(() => {
 });
 
 describe("escapeXml", () => {
-  it("escapes the five characters that xml treats as markup", () => {
+  it("escapes the five characters xml treats as markup", () => {
     expect(escapeXml(`<a href="x">Tom & Jerry's</a>`)).toBe(
       "&lt;a href=&quot;x&quot;&gt;Tom &amp; Jerry&apos;s&lt;/a&gt;",
     );
   });
 
-  it("escapes an existing entity again so it survives as text", () => {
+  it("escapes an existing entity again to keep it as text", () => {
     expect(escapeXml("&lt;")).toBe("&amp;lt;");
   });
 
-  it("leaves accented letters and other text unchanged as given", () => {
+  it("leaves accented letters and other text unchanged", () => {
     expect(escapeXml("Árvíztűrő Kft. 1/2")).toBe("Árvíztűrő Kft. 1/2");
   });
 });
 
 describe("element", () => {
-  it("wraps an escaped value in an opening and a closing tag", () => {
+  it("wraps an escaped value in opening and closing tags", () => {
     expect(element("name", "A & B")).toBe("<name>A &amp; B</name>");
   });
 
-  it("returns nothing for an undefined value, omitting the tag", () => {
+  it("omits the whole tag when the value is undefined", () => {
     expect(element("name", undefined)).toBe("");
   });
 
-  it("keeps an empty string as an empty element instead of none", () => {
+  it("keeps an empty string as an empty element, not none", () => {
     expect(element("name", "")).toBe("<name></name>");
   });
 });
 
 describe("callNav", () => {
   describe("request envelope", () => {
-    it("matches the header and user of NAV's tokenExchange sample", async () => {
+    it("matches the header and user of NAV's sample request", async () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2019-09-11T10:55:31.440Z"));
 
@@ -164,7 +164,7 @@ describe("callNav", () => {
       );
     });
 
-    it("signs operations like NAV's manageAnnulment sample request", async () => {
+    it("signs operations like NAV's manageAnnulment sample", async () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2019-09-11T13:37:09.385Z"));
       vi.mocked(createRequestId).mockReturnValue("RID338592103413");
@@ -191,7 +191,7 @@ describe("callNav", () => {
       expect(body).toMatch(/<\/software><body\/><\/ManageAnnulmentRequest>$/);
     });
 
-    it("includes the optional developer fields of the software block", async () => {
+    it("sends the software block's optional developer fields", async () => {
       const fetch = stubFetch(response("QueryTaxpayerResponse", result("OK")));
 
       await callNav(
@@ -210,7 +210,7 @@ describe("callNav", () => {
       );
     });
 
-    it("posts xml to the operation on the test host with a timeout", async () => {
+    it("posts xml to the operation's test url with a timeout", async () => {
       const fetch = stubFetch(response("QueryTaxpayerResponse", result("OK")));
 
       await callNav("queryTaxpayer", CREDENTIALS, SOFTWARE, "");
@@ -232,7 +232,7 @@ describe("callNav", () => {
       expect(init?.signal).toBeInstanceOf(AbortSignal);
     });
 
-    it("posts to the production host when the caller asks for it", async () => {
+    it("posts to the production host when the caller asks", async () => {
       const fetch = stubFetch(response("QueryTaxpayerResponse", result("OK")));
 
       await callNav(
@@ -249,7 +249,7 @@ describe("callNav", () => {
   });
 
   describe("successful responses", () => {
-    it("returns the body without the header, result and software", async () => {
+    it("returns the body without header, result and software", async () => {
       stubFetch(
         response(
           "QueryTaxpayerResponse",
@@ -271,7 +271,7 @@ describe("callNav", () => {
       );
     });
 
-    it("keeps leading zeros and numbers as the strings NAV sent", async () => {
+    it("keeps numbers and leading zeros as NAV's strings", async () => {
       stubFetch(
         response(
           "QueryInvoiceDigestResponse",
@@ -306,7 +306,7 @@ describe("callNav", () => {
       });
     });
 
-    it("returns a repeatable element as an array even when it is alone", async () => {
+    it("returns a repeatable element as an array when alone", async () => {
       stubFetch(
         response(
           "QueryTransactionStatusResponse",
@@ -339,7 +339,7 @@ describe("callNav", () => {
       });
     });
 
-    it("strips whichever namespace prefix NAV puts on an element", async () => {
+    it("strips any namespace prefix NAV puts on an element", async () => {
       stubFetch(
         [
           '<?xml version="1.0" encoding="UTF-8"?>',
@@ -368,7 +368,7 @@ describe("callNav", () => {
   });
 
   describe("failed responses", () => {
-    it("reports a GeneralErrorResponse with its validation messages", async () => {
+    it("reports a GeneralErrorResponse with its messages", async () => {
       stubFetch(
         response(
           "GeneralErrorResponse",
@@ -402,7 +402,7 @@ describe("callNav", () => {
       );
     });
 
-    it("reads a GeneralExceptionResponse's result fields at the root", async () => {
+    it("reads the root fields of a GeneralExceptionResponse", async () => {
       stubFetch(
         [
           '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
@@ -428,7 +428,7 @@ describe("callNav", () => {
       });
     });
 
-    it("treats an OK funcCode saying the endpoint is down as failure", async () => {
+    it("treats an OK saying the endpoint is down as failure", async () => {
       stubFetch(
         [
           '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
@@ -452,7 +452,7 @@ describe("callNav", () => {
       );
     });
 
-    it("treats an http error as failure even when funcCode says OK", async () => {
+    it("fails on an http error even when funcCode says OK", async () => {
       stubFetch(response("QueryTaxpayerResponse", result("OK")), {
         status: 500,
       });
@@ -465,7 +465,7 @@ describe("callNav", () => {
       });
     });
 
-    it("quotes the first 200 characters of a body that is not xml", async () => {
+    it("quotes the first 200 characters of a non-xml body", async () => {
       stubFetch(`upstream connect error ${"x".repeat(300)}`, {
         status: 502,
       });
@@ -482,7 +482,7 @@ describe("callNav", () => {
       });
     });
 
-    it("falls back to the status text when the error body is empty", async () => {
+    it("uses the status text when the error body is empty", async () => {
       stubFetch("", { status: 503, statusText: "Service Unavailable" });
 
       expect(
@@ -493,7 +493,7 @@ describe("callNav", () => {
       });
     });
 
-    it("reports a network failure as http status 0 with its message", async () => {
+    it("reports a network failure as status 0 with the cause", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn(async () => {
@@ -515,7 +515,7 @@ describe("callNav", () => {
   });
 
   describe("timeout", () => {
-    it("gives up after 55 seconds, before NAV's own 60 second limit", async () => {
+    it("gives up after 55 seconds, before NAV gives up at 60", async () => {
       vi.useFakeTimers();
 
       const timeout = vi
@@ -580,7 +580,7 @@ describe("callNav", () => {
 });
 
 describe("requestExchangeToken", () => {
-  it("decodes the token with the exchange key and keeps its validity", async () => {
+  it("decodes the token and keeps its validity window", async () => {
     const fetch = stubFetch(
       response(
         "TokenExchangeResponse",
@@ -610,7 +610,7 @@ describe("requestExchangeToken", () => {
     );
   });
 
-  it("blames the exchange key when the token does not decode with it", async () => {
+  it("blames the exchange key when the token won't decode", async () => {
     stubFetch(
       response(
         "TokenExchangeResponse",
@@ -630,7 +630,7 @@ describe("requestExchangeToken", () => {
     });
   });
 
-  it("passes NAV's error through when it refuses to issue a token", async () => {
+  it("passes NAV's error through when it refuses a token", async () => {
     stubFetch(
       response(
         "GeneralErrorResponse",
@@ -663,7 +663,7 @@ describe("getServiceMetrics", () => {
     "</metric>",
   );
 
-  it("gets every metric from the public test metric service", async () => {
+  it("gets every metric from NAV's public test service", async () => {
     const fetch = stubFetch(METRICS);
 
     expect(await getServiceMetrics("test")).toEqual({
@@ -697,7 +697,7 @@ describe("getServiceMetrics", () => {
     expect(init?.headers).toEqual({ accept: "application/xml" });
   });
 
-  it("gets a single metric by its url-encoded name in production", async () => {
+  it("gets one metric by url-encoded name in production", async () => {
     const fetch = stubFetch(METRICS);
 
     await getServiceMetrics("production", "INVOICE/SERVICE CALL");
@@ -707,7 +707,7 @@ describe("getServiceMetrics", () => {
     );
   });
 
-  it("reports the 404 NAV returns for a metric name it does not know", async () => {
+  it("reports NAV's 404 for a metric name it does not know", async () => {
     stubFetch("", { status: 404, statusText: "Not Found" });
 
     expect(await getServiceMetrics("test", "NO_SUCH_METRIC")).toEqual({
@@ -718,21 +718,21 @@ describe("getServiceMetrics", () => {
 });
 
 describe("decodeInvoiceData", () => {
-  it("parses plain base64 invoice data into the document's fields", () => {
+  it("parses plain base64 invoice data into its fields", () => {
     expect(decodeInvoiceData(INVOICE_DATA, false)).toEqual({
       invoiceNumber: "00042",
       invoiceIssueDate: "2026-10-01",
     });
   });
 
-  it("gunzips invoice data that the submitter compressed before it", () => {
+  it("gunzips invoice data that the submitter compressed", () => {
     expect(decodeInvoiceData(GZIPPED_INVOICE_DATA, true)).toEqual({
       invoiceNumber: "00042",
       invoiceIssueDate: "2026-10-01",
     });
   });
 
-  it("keeps a single invoice line as an array, like any repeatable", () => {
+  it("keeps a single invoice line as an array of lines", () => {
     const xml = [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<InvoiceData xmlns="http://schemas.nav.gov.hu/OSA/3.0/data" xmlns:base="http://schemas.nav.gov.hu/OSA/3.0/base">',
@@ -758,7 +758,7 @@ describe("decodeInvoiceData", () => {
     });
   });
 
-  it("throws when data said to be compressed is not actually gzip", () => {
+  it("throws when data marked as compressed is not gzip", () => {
     expect(() => decodeInvoiceData(INVOICE_DATA, true)).toThrow();
   });
 });

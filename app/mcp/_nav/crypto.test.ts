@@ -36,11 +36,11 @@ const ENCODED_EXCHANGE_TOKEN =
   "eb7OSZwCZb8FyKoaMeke3ddOe+58NhWQ0XKNuqn4N2SHGdipOH4zIb/mgpWYBesWBbo0Z5EjlYzq/sA1IwjFqA==";
 
 describe("createRequestId", () => {
-  it("returns thirty characters that NAV's requestId pattern allows", () => {
+  it("returns 30 characters that NAV's requestId allows", () => {
     expect(createRequestId()).toMatch(/^[a-zA-Z0-9]{30}$/);
   });
 
-  it("returns a different id on every call, as retries require", () => {
+  it("returns a new id on every call, as retries require", () => {
     const ids = new Set(Array.from({ length: 1000 }, createRequestId));
 
     expect(ids.size).toBe(1000);
@@ -48,26 +48,26 @@ describe("createRequestId", () => {
 });
 
 describe("passwordHash", () => {
-  it("matches the published sha-512 test vector for the string abc", () => {
+  it("matches the published sha-512 test vector for abc", () => {
     expect(passwordHash("abc")).toBe(
       "DDAF35A193617ABACC417349AE20413112E6FA4E89A97EA20A9EEEE64B55D39A2192992A274FC1A836BA3C23A3FEEBBD454D4423643CE80E2A9AC94FA54CA49F",
     );
   });
 
-  it("hashes the utf-8 bytes of a password with accented letters", () => {
+  it("hashes the utf-8 bytes of a password with accents", () => {
     expect(passwordHash("árvíztűrő tükörfúrógép")).toBe(
       "25BAEE1AA530F222FB3B413797853E2096A0AE0C3D44DD987C92D92F44EB3F45EE455D7F451A1AAC607B16340D88E6F4D6FC0D6D17ED6569883060E8F34CB82A",
     );
   });
 
-  it("returns 128 upper-case hex digits whatever the password is", () => {
+  it("returns 128 upper-case hex digits for any password", () => {
     expect(passwordHash("")).toMatch(/^[0-9A-F]{128}$/);
   });
 });
 
 describe("requestSignature", () => {
   describe("specification example", () => {
-    it("signs the two operations of the manageInvoice example", () => {
+    it("signs both operations of the manageInvoice example", () => {
       expect(
         requestSignature(
           SPEC_EXAMPLE.requestId,
@@ -78,7 +78,7 @@ describe("requestSignature", () => {
       ).toBe(SPEC_EXAMPLE.signature);
     });
 
-    it("signs only the partial authentication without operations", () => {
+    it("signs partial authentication alone without operations", () => {
       // Section 1.5.2 gives no value, so this is SHA3-512 computed with
       // Python's hashlib over the example's partial authentication string.
       expect(
@@ -92,7 +92,7 @@ describe("requestSignature", () => {
       );
     });
 
-    it("changes the signature when the operations swap their order", () => {
+    it("changes the signature when operations swap order", () => {
       expect(
         requestSignature(
           SPEC_EXAMPLE.requestId,
@@ -105,7 +105,7 @@ describe("requestSignature", () => {
   });
 
   describe("sample requests", () => {
-    it("matches the signature of the tokenExchange sample request", () => {
+    it("matches the signature of NAV's tokenExchange sample", () => {
       expect(
         requestSignature(
           "RID896801578348",
@@ -117,7 +117,7 @@ describe("requestSignature", () => {
       );
     });
 
-    it("matches the signature of the manageAnnulment sample request", () => {
+    it("matches the signature of NAV's manageAnnulment sample", () => {
       expect(
         requestSignature(
           "RID338592103413",
@@ -132,7 +132,7 @@ describe("requestSignature", () => {
   });
 
   describe("timestamp mask", () => {
-    it("truncates milliseconds instead of rounding them to a second", () => {
+    it("truncates milliseconds instead of rounding them", () => {
       const sign = (timestamp: string) =>
         requestSignature("RID896801578348", timestamp, SAMPLE_SIGNING_KEY);
 
@@ -148,19 +148,19 @@ describe("requestSignature", () => {
 });
 
 describe("decodeExchangeToken", () => {
-  it("decrypts an aes-128-ecb token encrypted by openssl to text", () => {
+  it("decrypts an aes-128-ecb token that openssl encrypted", () => {
     expect(decodeExchangeToken(ENCODED_EXCHANGE_TOKEN, EXCHANGE_KEY)).toBe(
       EXCHANGE_TOKEN,
     );
   });
 
-  it("throws when the exchange key does not match the token's key", () => {
+  it("throws when the exchange key does not fit the token", () => {
     expect(() =>
       decodeExchangeToken(ENCODED_EXCHANGE_TOKEN, "WRONGKEY01234567"),
     ).toThrow();
   });
 
-  it("throws when the exchange key is not sixteen bytes in utf-8", () => {
+  it("throws when the exchange key is not 16 utf-8 bytes", () => {
     expect(() =>
       decodeExchangeToken(ENCODED_EXCHANGE_TOKEN, "TSTKEY012345678é"),
     ).toThrow(/key length/i);
