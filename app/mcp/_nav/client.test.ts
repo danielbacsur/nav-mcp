@@ -465,6 +465,43 @@ describe("callNav", () => {
       });
     });
 
+    it("fails on funcCode ERROR even when http status is 200", async () => {
+      stubFetch(
+        response(
+          "QueryTaxpayerResponse",
+          result("ERROR", "INVALID_REQUEST", "Helytelen kérés!"),
+        ),
+      );
+
+      expect(await callNav("queryTaxpayer", CREDENTIALS, SOFTWARE, "")).toEqual(
+        {
+          ok: false,
+          error: {
+            httpStatus: 200,
+            funcCode: "ERROR",
+            errorCode: "INVALID_REQUEST",
+            message: "Helytelen kérés!",
+            requestId: "RID896801578348",
+          },
+        },
+      );
+    });
+
+    it("fails on a non-xml body even when http status is 200", async () => {
+      stubFetch("Service temporarily unavailable");
+
+      expect(await callNav("queryTaxpayer", CREDENTIALS, SOFTWARE, "")).toEqual(
+        {
+          ok: false,
+          error: {
+            httpStatus: 200,
+            message: "Service temporarily unavailable",
+            requestId: "RID896801578348",
+          },
+        },
+      );
+    });
+
     it("quotes the first 200 characters of a non-xml body", async () => {
       stubFetch(`upstream connect error ${"x".repeat(300)}`, {
         status: 502,
