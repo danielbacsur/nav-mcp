@@ -934,6 +934,38 @@ describe("handlers", () => {
       });
     });
 
+    // A known gap, left to fix later: both tools let gunzip's error escape.
+    // Replace this test with the intended behaviour once they handle it.
+    it("still throws on data flagged gzip that isn't gzip", async () => {
+      stubNav({
+        queryInvoiceData: ok(
+          "QueryInvoiceDataResponse",
+          "<invoiceDataResult>",
+          `<invoiceData>${INVOICE_DATA}</invoiceData>`,
+          "<compressedContentIndicator>true</compressedContentIndicator>",
+          "</invoiceDataResult>",
+        ),
+        queryTransactionStatus: ok(
+          "QueryTransactionStatusResponse",
+          "<processingResults><processingResult><index>1</index>",
+          "<compressedContentIndicator>true</compressedContentIndicator>",
+          `<originalRequest>${INVOICE_DATA}</originalRequest>`,
+          "</processingResult></processingResults>",
+        ),
+      });
+
+      await expect(call("query_invoice_data")).rejects.toMatchObject({
+        code: "Z_DATA_ERROR",
+      });
+
+      await expect(
+        call("query_transaction_status", {
+          transactionId: "4LOVXPC8P27LKH1V",
+          returnOriginalRequest: true,
+        }),
+      ).rejects.toMatchObject({ code: "Z_DATA_ERROR" });
+    });
+
     it("gets metrics from the asked host without credentials", async () => {
       vi.stubEnv("NAV_SOFTWARE_ID", undefined);
 
