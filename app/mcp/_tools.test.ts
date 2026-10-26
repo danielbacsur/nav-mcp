@@ -116,6 +116,17 @@ const TOKEN_EXCHANGE = ok(
   "<tokenValidityTo>2026-10-26T10:05:00.000Z</tokenValidityTo>",
 );
 
+// A new response each time, since a response body can be read only once.
+function authenticationError() {
+  return new Response(
+    ok("GeneralErrorResponse").replace(
+      "<ns2:funcCode>OK</ns2:funcCode>",
+      "<ns2:funcCode>ERROR</ns2:funcCode><ns2:errorCode>INVALID_SECURITY_USER</ns2:errorCode><ns2:message>Helytelen authentikáció!</ns2:message>",
+    ),
+    { status: 401 },
+  );
+}
+
 // Answers each NAV operation, named by the last segment of its url, and
 // records what was sent.
 function stubNav(responses: Record<string, string | Response> = {}) {
@@ -633,6 +644,38 @@ describe("request bodies", () => {
         )}</common:requestSignature>`,
       );
     });
+
+    it("numbers each annulment in a request from one upward", async () => {
+      const fetch = stubNav({
+        tokenExchange: TOKEN_EXCHANGE,
+        manageAnnulment: ok("ManageAnnulmentResponse"),
+      });
+
+      await call("manage_annulment", {
+        annulments: ["INV-1", "INV-2", "INV-3"].map((invoiceNumber) => ({
+          invoiceNumber,
+          code: "ERRATIC_DATA",
+          reason: "Wrong data.",
+        })),
+      });
+
+      const operations = requestBody(fetch, 1).matchAll(
+        /<annulmentOperation><index>(.*?)<\/index><annulmentOperation>ANNUL<\/annulmentOperation><invoiceAnnulment>(.*?)<\/invoiceAnnulment><\/annulmentOperation>/g,
+      );
+
+      expect(
+        Array.from(operations, ([, index, annulment]) => [
+          index,
+          Buffer.from(annulment, "base64")
+            .toString("utf8")
+            .match(/<annulmentReference>(.*?)</)![1],
+        ]),
+      ).toEqual([
+        ["1", "INV-1"],
+        ["2", "INV-2"],
+        ["3", "INV-3"],
+      ]);
+    });
   });
 });
 
@@ -731,15 +774,7 @@ describe("handlers", () => {
     });
 
     it("returns NAV's error as a structured error result", async () => {
-      stubNav({
-        queryTaxpayer: new Response(
-          ok("GeneralErrorResponse").replace(
-            "<ns2:funcCode>OK</ns2:funcCode>",
-            "<ns2:funcCode>ERROR</ns2:funcCode><ns2:errorCode>INVALID_SECURITY_USER</ns2:errorCode><ns2:message>Helytelen authentikáció!</ns2:message>",
-          ),
-          { status: 401 },
-        ),
-      });
+      stubNav({ queryTaxpayer: authenticationError() });
 
       const result = await call("query_taxpayer");
 
@@ -770,6 +805,22 @@ describe("handlers", () => {
       expect(JSON.stringify(result)).not.toContain(ENCODED_EXCHANGE_TOKEN);
     });
 
+    it("reports NAV's refusal to issue a token as an error", async () => {
+      stubNav({ tokenExchange: authenticationError() });
+
+      expect(await call("token_exchange")).toMatchObject({
+        structuredContent: {
+          error: {
+            httpStatus: 401,
+            funcCode: "ERROR",
+            errorCode: "INVALID_SECURITY_USER",
+            message: "Helytelen authentikáció!",
+          },
+        },
+        isError: true,
+      });
+    });
+
     it("returns the transaction id NAV assigns a submission", async () => {
       stubNav({
         tokenExchange: TOKEN_EXCHANGE,
@@ -785,22 +836,24 @@ describe("handlers", () => {
       });
     });
 
-    it("stops a submission when NAV won't issue it a token", async () => {
-      const fetch = stubNav({
-        tokenExchange: new Response("", {
-          status: 503,
-          statusText: "Service Unavailable",
-        }),
-      });
+    it("stops either submission when NAV won't issue a token", async () => {
+      for (const name of ["manage_invoice", "manage_annulment"]) {
+        const fetch = stubNav({
+          tokenExchange: new Response("", {
+            status: 503,
+            statusText: "Service Unavailable",
+          }),
+        });
 
-      expect(await call("manage_annulment")).toMatchObject({
-        structuredContent: {
-          error: { httpStatus: 503, message: "Service Unavailable" },
-        },
-        isError: true,
-      });
+        expect(await call(name)).toMatchObject({
+          structuredContent: {
+            error: { httpStatus: 503, message: "Service Unavailable" },
+          },
+          isError: true,
+        });
 
-      expect(fetch).toHaveBeenCalledTimes(1);
+        expect(fetch).toHaveBeenCalledTimes(1);
+      }
     });
 
     it("decodes invoice data whether it was gzipped or not", async () => {
