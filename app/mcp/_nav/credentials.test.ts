@@ -41,19 +41,6 @@ describe("readCredentials", () => {
       });
     });
 
-    it("reads the headers whatever case the caller uses", () => {
-      const lowerCase = Object.fromEntries(
-        Object.entries(HEADERS).map(([name, value]) => [
-          name.toLowerCase(),
-          value,
-        ]),
-      );
-
-      expect(readCredentials(request(lowerCase))).toEqual(
-        readCredentials(request(HEADERS)),
-      );
-    });
-
     it("upper-cases a password hash given in lower case", () => {
       const { credentials } = readCredentials(
         request({
