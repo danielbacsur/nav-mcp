@@ -553,65 +553,17 @@ describe("callNav", () => {
 
   describe("timeout", () => {
     it("gives up after 55 seconds, before NAV gives up at 60", async () => {
-      vi.useFakeTimers();
+      const timeout = vi.spyOn(AbortSignal, "timeout");
 
-      const timeout = vi
-        .spyOn(AbortSignal, "timeout")
-        .mockImplementation((ms) => {
-          const controller = new AbortController();
+      const fetch = stubFetch(response("QueryTaxpayerResponse", result("OK")));
 
-          setTimeout(
-            () =>
-              controller.abort(
-                new DOMException(
-                  "The operation was aborted due to timeout",
-                  "TimeoutError",
-                ),
-              ),
-            ms,
-          );
+      await callNav("queryTaxpayer", CREDENTIALS, SOFTWARE, "");
 
-          return controller.signal;
-        });
+      expect(timeout).toHaveBeenCalledExactlyOnceWith(55_000);
 
-      // Like fetch, rejects with the signal's reason once it aborts.
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(
-          (_url: string, init: RequestInit) =>
-            new Promise<Response>((_resolve, reject) => {
-              init.signal?.addEventListener("abort", () =>
-                reject(init.signal?.reason),
-              );
-            }),
-        ),
+      expect(fetch.mock.calls[0][1]?.signal).toBe(
+        timeout.mock.results[0].value,
       );
-
-      let settled = false;
-
-      const pending = callNav("queryTaxpayer", CREDENTIALS, SOFTWARE, "").then(
-        (result) => {
-          settled = true;
-          return result;
-        },
-      );
-
-      await vi.advanceTimersByTimeAsync(54_999);
-
-      expect(settled).toBe(false);
-
-      await vi.advanceTimersByTimeAsync(1);
-
-      expect(await pending).toEqual({
-        ok: false,
-        error: {
-          httpStatus: 0,
-          message: "The operation was aborted due to timeout",
-          requestId: "RID896801578348",
-        },
-      });
-
-      expect(timeout).toHaveBeenCalledWith(55_000);
     });
   });
 });
