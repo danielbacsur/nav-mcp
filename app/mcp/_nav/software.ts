@@ -2,12 +2,20 @@ import { z } from "zod";
 
 import packageJson from "@/package.json";
 
+// Next loads `KEY=""` as an empty string, so an empty optional variable
+// counts as unset rather than failing validation or sending an empty element.
+const optional = <T extends z.ZodType>(schema: T) =>
+  z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    schema.optional(),
+  );
+
 const envSchema = z.object({
   NAV_SOFTWARE_ID: z.string().regex(/^[0-9A-Z-]{18}$/),
   NAV_SOFTWARE_DEV_NAME: z.string().min(1),
   NAV_SOFTWARE_DEV_CONTACT: z.string().min(1),
-  NAV_SOFTWARE_DEV_COUNTRY_CODE: z.string().length(2).optional(),
-  NAV_SOFTWARE_DEV_TAX_NUMBER: z.string().min(1).optional(),
+  NAV_SOFTWARE_DEV_COUNTRY_CODE: optional(z.string().length(2)),
+  NAV_SOFTWARE_DEV_TAX_NUMBER: optional(z.string().min(1)),
 });
 
 export type NavSoftware = {
