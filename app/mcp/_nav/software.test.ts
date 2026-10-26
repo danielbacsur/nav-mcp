@@ -55,9 +55,32 @@ describe("readSoftware", () => {
       expect(software?.softwareDevCountryCode).toBeUndefined();
       expect(software?.softwareDevTaxNumber).toBeUndefined();
     });
+
+    it("treats an empty optional variable, as Next loads it, as unset", () => {
+      stubEnv({
+        NAV_SOFTWARE_DEV_COUNTRY_CODE: "",
+        NAV_SOFTWARE_DEV_TAX_NUMBER: "",
+      });
+
+      const { software } = readSoftware();
+
+      expect(software).toBeDefined();
+      expect(software?.softwareDevCountryCode).toBeUndefined();
+      expect(software?.softwareDevTaxNumber).toBeUndefined();
+    });
   });
 
   describe("invalid environment", () => {
+    it("names only the required variables an unfilled example leaves", () => {
+      // Every variable in .env.example is an empty string.
+      stubEnv(Object.fromEntries(Object.keys(ENV).map((name) => [name, ""])));
+
+      expect(readSoftware()).toEqual({
+        error:
+          "The server is missing or has invalid NAV_SOFTWARE_ID, NAV_SOFTWARE_DEV_NAME, NAV_SOFTWARE_DEV_CONTACT.",
+      });
+    });
+
     it("names every required variable missing from the environment", () => {
       stubEnv({
         NAV_SOFTWARE_ID: undefined,
