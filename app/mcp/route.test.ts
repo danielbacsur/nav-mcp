@@ -9,10 +9,13 @@ const HEADERS = {
   "X-NAV-Tax-Number": "11111111",
 };
 
+// The optional vars are unset so a developer's own values can't leak in.
 const ENV = {
   NAV_SOFTWARE_ID: "HU12345678-NAVMCP1",
   NAV_SOFTWARE_DEV_NAME: "Test Developer",
   NAV_SOFTWARE_DEV_CONTACT: "developer@example.com",
+  NAV_SOFTWARE_DEV_COUNTRY_CODE: undefined,
+  NAV_SOFTWARE_DEV_TAX_NUMBER: undefined,
 };
 
 // A 2025-era Streamable HTTP request, which the handler serves statelessly.

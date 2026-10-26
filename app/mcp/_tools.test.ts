@@ -12,10 +12,13 @@ const HEADERS = {
   "X-NAV-Tax-Number": "11111111-2-42",
 };
 
+// The optional vars are unset so a developer's own values can't leak in.
 const ENV = {
   NAV_SOFTWARE_ID: "HU12345678-NAVMCP1",
   NAV_SOFTWARE_DEV_NAME: "Test Developer",
   NAV_SOFTWARE_DEV_CONTACT: "developer@example.com",
+  NAV_SOFTWARE_DEV_COUNTRY_CODE: undefined,
+  NAV_SOFTWARE_DEV_TAX_NUMBER: undefined,
 };
 
 // Encrypted with `openssl enc -aes-128-ecb -K <hex of X-NAV-Exchange-Key>`.
