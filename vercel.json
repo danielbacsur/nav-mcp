@@ -1,4 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["fra1"]
+  "regions": ["fra1"],
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "https://github.com/danielbacsur/nav-mcp",
+      "permanent": false
+    }
+  ]
 }
