@@ -12,12 +12,14 @@ import {
   element,
   getServiceMetrics,
   type NavResult,
+  requestExchangeToken,
 } from "./_nav/client";
 import {
   type NavCredentials,
   readCredentials,
   readEnv,
 } from "./_nav/credentials";
+import type { SignedOperation } from "./_nav/crypto";
 import { readSoftware } from "./_nav/software";
 
 type ToolDefinition = {
@@ -25,9 +27,9 @@ type ToolDefinition = {
   title: string;
   description: string;
   annotations: ToolAnnotations;
-  inputSchema?: z.ZodObject;
+  inputSchema: z.ZodObject;
   // Method syntax keeps the arguments bivariant, so each tool can narrow them.
-  handler?(
+  handler(
     args: Record<string, unknown>,
     ctx: ServerContext,
   ): Promise<CallToolResult>;
@@ -82,6 +84,145 @@ async function queryNav(
   return {
     result: await callNav(operation, credentials, software, body(credentials)),
   };
+}
+
+// Requests a fresh exchange token for every submission, since each token
+// covers a single manageInvoice or manageAnnulment call.
+async function submitNav(
+  ctx: ServerContext,
+  operation: string,
+  operations: SignedOperation[],
+  body: (token: string) => string,
+) {
+  const { credentials, error } = readCredentials(ctx.http?.req);
+
+  if (!credentials) {
+    return { error };
+  }
+
+  if (!credentials.exchangeKey) {
+    return { error: "Send X-NAV-Exchange-Key to submit data." };
+  }
+
+  const { software, error: softwareError } = readSoftware();
+
+  if (!software) {
+    return { error: softwareError };
+  }
+
+  const token = await requestExchangeToken(
+    credentials,
+    software,
+    credentials.exchangeKey,
+  );
+
+  if (!token.ok) {
+    return { result: token };
+  }
+
+  return {
+    result: await callNav(
+      operation,
+      credentials,
+      software,
+      body(token.token),
+      operations,
+    ),
+  };
+}
+
+function base64(xml: string) {
+  return Buffer.from(xml, "utf8").toString("base64");
+}
+
+const invoiceOperations = z.object({
+  operations: z
+    .array(
+      z.object({
+        operation: z
+          .enum(["CREATE", "MODIFY", "STORNO"])
+          .describe(
+            "CREATE for an invoice, MODIFY or STORNO for a document that modifies or cancels one.",
+          ),
+        invoiceData: z
+          .string()
+          .min(1)
+          .describe(
+            "An InvoiceData XML document, valid against invoiceData.xsd.",
+          ),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
+function invoiceOperationsXml(operations: SignedOperation[]) {
+  return [
+    "<invoiceOperations>",
+    element("compressedContent", "false"),
+    ...operations.map(({ operation, data }, index) =>
+      [
+        "<invoiceOperation>",
+        element("index", String(index + 1)),
+        element("invoiceOperation", operation),
+        element("invoiceData", data),
+        "</invoiceOperation>",
+      ].join(""),
+    ),
+    "</invoiceOperations>",
+  ].join("");
+}
+
+const annulments = z.object({
+  annulments: z
+    .array(
+      z.object({
+        invoiceNumber: z
+          .string()
+          .min(1)
+          .max(50)
+          .describe("The invoice or modification document to annul."),
+        code: z.enum([
+          "ERRATIC_DATA",
+          "ERRATIC_INVOICE_NUMBER",
+          "ERRATIC_INVOICE_ISSUE_DATE",
+          "ERRATIC_ELECTRONIC_HASH_VALUE",
+        ]),
+        reason: z.string().min(1).max(1024),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
+function invoiceAnnulmentXml(
+  annulment: z.infer<typeof annulments>["annulments"][number],
+) {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<InvoiceAnnulment xmlns="http://schemas.nav.gov.hu/OSA/3.0/annul">',
+    element("annulmentReference", annulment.invoiceNumber),
+    element("annulmentTimestamp", new Date().toISOString()),
+    element("annulmentCode", annulment.code),
+    element("annulmentReason", annulment.reason),
+    "</InvoiceAnnulment>",
+  ].join("");
+}
+
+function annulmentOperationsXml(operations: SignedOperation[]) {
+  return [
+    "<annulmentOperations>",
+    ...operations.map(({ operation, data }, index) =>
+      [
+        "<annulmentOperation>",
+        element("index", String(index + 1)),
+        element("annulmentOperation", operation),
+        element("invoiceAnnulment", data),
+        "</annulmentOperation>",
+      ].join(""),
+    ),
+    "</annulmentOperations>",
+  ].join("");
 }
 
 const direction = z
@@ -262,47 +403,116 @@ const query: ToolAnnotations = {
   openWorldHint: true,
 };
 
-// One tool per NAV Online Invoice 3.0 operation, in snake case. Tools
-// without a handler are not implemented yet.
+// One tool per NAV Online Invoice 3.0 operation, in snake case.
 export const tools: ToolDefinition[] = [
-  {
+  implemented({
     name: "token_exchange",
-    title: "Request exchange token",
+    title: "Check write access",
     description:
-      "Requests a single-use exchange token for one manage_invoice or manage_annulment call.",
+      "Requests an exchange token and decodes it with X-NAV-Exchange-Key, then returns only its validity. manage_invoice and manage_annulment request their own tokens.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: true,
     },
-  },
+    inputSchema: z.object({}),
+    handler: async (_args, ctx) => {
+      const { credentials, error } = readCredentials(ctx.http?.req);
 
-  {
+      if (!credentials) {
+        return errorResult(error);
+      }
+
+      if (!credentials.exchangeKey) {
+        return errorResult("Send X-NAV-Exchange-Key to request a token.");
+      }
+
+      const { software, error: softwareError } = readSoftware();
+
+      if (!software) {
+        return errorResult(softwareError);
+      }
+
+      const token = await requestExchangeToken(
+        credentials,
+        software,
+        credentials.exchangeKey,
+      );
+
+      return navResult(
+        token.ok
+          ? {
+              ok: true,
+              data: {
+                tokenValidityFrom: token.validFrom,
+                tokenValidityTo: token.validTo,
+              },
+            }
+          : token,
+      );
+    },
+  }),
+
+  implemented({
     name: "manage_invoice",
     title: "Submit invoice data",
     description:
-      "Submits 1-100 invoice data reports (CREATE, MODIFY or STORNO) and returns a transactionId to poll with query_transaction_status.",
+      "Submits 1-100 invoice data reports (CREATE, MODIFY or STORNO) and returns a transactionId to poll with query_transaction_status. Needs X-NAV-Exchange-Key.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: true,
     },
-  },
+    inputSchema: invoiceOperations,
+    handler: async (args, ctx) => {
+      const operations = args.operations.map((item) => ({
+        operation: item.operation,
+        data: base64(item.invoiceData),
+      }));
 
-  {
+      const { result, error } = await submitNav(
+        ctx,
+        "manageInvoice",
+        operations,
+        (token) =>
+          element("exchangeToken", token) + invoiceOperationsXml(operations),
+      );
+
+      return result ? navResult(result) : errorResult(error);
+    },
+  }),
+
+  implemented({
     name: "manage_annulment",
     title: "Submit invoice annulments",
     description:
-      "Submits 1-100 technical annulments of earlier reports. Each annulment takes effect only after approval on the NAV portal.",
+      "Submits 1-100 technical annulments of earlier reports and returns a transactionId. Each annulment takes effect only after approval on the NAV portal. Needs X-NAV-Exchange-Key.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
     },
-  },
+    inputSchema: annulments,
+    handler: async (args, ctx) => {
+      const operations = args.annulments.map((annulment) => ({
+        operation: "ANNUL",
+        data: base64(invoiceAnnulmentXml(annulment)),
+      }));
+
+      const { result, error } = await submitNav(
+        ctx,
+        "manageAnnulment",
+        operations,
+        (token) =>
+          element("exchangeToken", token) + annulmentOperationsXml(operations),
+      );
+
+      return result ? navResult(result) : errorResult(error);
+    },
+  }),
 
   implemented({
     name: "query_transaction_status",
@@ -486,10 +696,6 @@ export const tools: ToolDefinition[] = [
 
 export function registerTools(server: McpServer) {
   for (const { name, inputSchema, handler, ...config } of tools) {
-    server.registerTool(
-      name,
-      { ...config, inputSchema: inputSchema ?? z.object({}) },
-      handler ?? (async () => errorResult(`${name} is not implemented yet.`)),
-    );
+    server.registerTool(name, { ...config, inputSchema }, handler);
   }
 }
