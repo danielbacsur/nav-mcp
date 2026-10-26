@@ -11,6 +11,7 @@ const headersSchema = z
       .regex(/^[0-9A-Fa-f]{128}$/)
       .optional(),
     "x-nav-signature-key": z.string().min(1),
+    "x-nav-exchange-key": z.string().length(16).optional(),
     "x-nav-tax-number": z.string().regex(/^\d{8}(-?\d-?\d{2})?$/),
     "x-nav-env": z.enum(["test", "production"]).default("test"),
   })
@@ -27,6 +28,7 @@ export type NavCredentials = {
   login: string;
   passwordHash: string;
   signingKey: string;
+  exchangeKey?: string;
   taxNumber: string;
   env: "test" | "production";
 };
@@ -78,6 +80,7 @@ export function readCredentials(request: Request | undefined) {
       parsed["x-nav-password-hash"] ?? passwordHash(parsed["x-nav-password"]!)
     ).toUpperCase(),
     signingKey: parsed["x-nav-signature-key"],
+    exchangeKey: parsed["x-nav-exchange-key"],
     taxNumber: parsed["x-nav-tax-number"].slice(0, 8),
     env: parsed["x-nav-env"],
   };

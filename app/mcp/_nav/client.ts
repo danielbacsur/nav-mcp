@@ -3,7 +3,12 @@ import { gunzipSync } from "node:zlib";
 import { XMLParser } from "fast-xml-parser";
 
 import type { NavCredentials } from "./credentials";
-import { createRequestId, requestSignature } from "./crypto";
+import {
+  createRequestId,
+  decodeExchangeToken,
+  requestSignature,
+  type SignedOperation,
+} from "./crypto";
 import type { NavSoftware } from "./software";
 
 const HOSTS = {
@@ -90,6 +95,7 @@ function envelope(
   software: NavSoftware,
   requestId: string,
   bodyXml: string,
+  operations: SignedOperation[],
 ) {
   const timestamp = new Date().toISOString();
 
@@ -97,6 +103,7 @@ function envelope(
     requestId,
     timestamp,
     credentials.signingKey,
+    operations,
   );
 
   const root = `${operation[0].toUpperCase()}${operation.slice(1)}Request`;
@@ -208,6 +215,7 @@ export function callNav(
   credentials: NavCredentials,
   software: NavSoftware,
   bodyXml: string,
+  operations: SignedOperation[] = [],
 ) {
   const requestId = createRequestId();
 
@@ -219,10 +227,54 @@ export function callNav(
         "content-type": "application/xml;charset=UTF-8",
         accept: "application/xml",
       },
-      body: envelope(operation, credentials, software, requestId, bodyXml),
+      body: envelope(
+        operation,
+        credentials,
+        software,
+        requestId,
+        bodyXml,
+        operations,
+      ),
     },
     requestId,
   );
+}
+
+// Returns the decoded single-use token that manageInvoice and manageAnnulment
+// need, valid for a few minutes.
+export async function requestExchangeToken(
+  credentials: NavCredentials,
+  software: NavSoftware,
+  exchangeKey: string,
+): Promise<
+  | { ok: true; token: string; validFrom: string; validTo: string }
+  | { ok: false; error: NavError }
+> {
+  const result = await callNav("tokenExchange", credentials, software, "");
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const { encodedExchangeToken, tokenValidityFrom, tokenValidityTo } =
+    result.data as Record<string, string>;
+
+  try {
+    return {
+      ok: true,
+      token: decodeExchangeToken(encodedExchangeToken, exchangeKey),
+      validFrom: tokenValidityFrom,
+      validTo: tokenValidityTo,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: {
+        httpStatus: 200,
+        message: "X-NAV-Exchange-Key could not decode the exchange token.",
+      },
+    };
+  }
 }
 
 export function getServiceMetrics(
